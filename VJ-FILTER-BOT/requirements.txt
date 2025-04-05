@@ -1,0 +1,27 @@
+# Core Telegram Bot Dependencies
+pyrogram==2.0.106
+python-telegram-bot==13.7
+
+# Environment Management
+python-dotenv==1.0.0
+
+# Web & Async
+aiohttp==3.8.4
+requests==2.28.2
+
+# Database
+psycopg2-binary==2.9.5
+
+# Media Processing
+cinemagoer==2022.2.11
+shortzy==0.0.5
+beautifulsoup4==4.11.2
+
+# Utilities
+pytz==2022.7.1
+python-dateutil==2.8.2
+
+# Development Tools
+black==22.10.0
+flake8==5.0.4
+pytest==7.2.0
