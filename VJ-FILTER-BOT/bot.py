@@ -13,14 +13,50 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load and validate environment variables
 load_dotenv()
 
-# Configure logging
+def validate_env():
+    """Validate required environment variables"""
+    required_vars = {
+        'TELEGRAM_TOKEN': (str, "Telegram bot token"),
+        'LOG_CHANNEL': (int, "Log channel ID"),
+        'AUTH_CHANNEL': (int, "Auth channel ID")
+    }
+    
+    missing = []
+    invalid = []
+    
+    for var, (var_type, desc) in required_vars.items():
+        value = os.getenv(var)
+        if not value:
+            missing.append(f"{var} ({desc})")
+            continue
+            
+        try:
+            if var_type is int:
+                int(value)
+        except ValueError:
+            invalid.append(f"{var} must be {var_type.__name__}")
+    
+    if missing or invalid:
+        error_msg = []
+        if missing:
+            error_msg.append("Missing required variables:\n- " + "\n- ".join(missing))
+        if invalid:
+            error_msg.append("Invalid variables:\n- " + "\n- ".join(invalid))
+        logging.critical("\n".join(error_msg))
+        sys.exit(1)
+
+validate_env()
+
+# Configure logging with sanitized error messages
 logging.config.fileConfig('logging.conf')
-logging.getLogger().setLevel(logging.INFO)
-logging.getLogger("pyrogram").setLevel(logging.ERROR)
-logging.getLogger("cinemagoer").setLevel(logging.ERROR)
+logging.getLogger().addFilter(lambda record: not any(
+    s in str(record.msg).lower() 
+    for s in ['token', 'api_key', 'secret']
+))
+# Logger levels were already set in logging.conf, no need to set again
 
 # Environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -51,6 +87,23 @@ loop = asyncio.get_event_loop()
 
 async def start():
     print('\nInitializing Your Bot')
+    
+    # Rate limiting setup
+    from pyrogram.errors import FloodWait
+    
+    
+    async def rate_limited_send(chat_id, text, max_retries=3):
+        """Send message with rate limiting"""
+        for attempt in range(max_retries):
+            try:
+                return await TechVJBot.send_message(chat_id=chat_id, text=text)
+            except FloodWait as e:
+                if attempt == max_retries - 1:
+                    raise
+                wait_time = e.value + 5
+                logging.warning(f"Rate limited. Waiting {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+    
     try:
         bot_info = await TechVJBot.get_me()
         await initialize_clients()
@@ -94,7 +147,7 @@ async def start():
 
         # Send startup notifications
         try:
-            await TechVJBot.send_message(
+            await rate_limited_send(
                 chat_id=LOG_CHANNEL,
                 text=script.RESTART_TXT.format(today, time)
             )
@@ -103,13 +156,13 @@ async def start():
 
         for ch in CHANNELS:
             try:
-                msg = await TechVJBot.send_message(chat_id=ch, text="**Bot Restarted**")
+                msg = await rate_limited_send(chat_id=ch, text="**Bot Restarted**")
                 await msg.delete()
             except Exception as e:
                 logging.error(f"Failed to send channel message to {ch}: {str(e)}")
 
         try:
-            msg = await TechVJBot.send_message(chat_id=AUTH_CHANNEL, text="**Bot Restarted**")
+            msg = await rate_limited_send(chat_id=AUTH_CHANNEL, text="**Bot Restarted**")
             await msg.delete()
         except Exception as e:
             logging.error(f"Failed to send auth channel message: {str(e)}")
