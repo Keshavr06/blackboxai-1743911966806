@@ -130,12 +130,21 @@ async def if_active(user_id: Union[int, str], group_id: Union[int, str]) -> bool
         return False
 
 
-async def make_active(user_id, group_id):
-    update = mycol.update_one(
-        {'_id': user_id},
-        {"$set": {"active_group" : group_id}}
-    )
-    return update.modified_count != 0
+async def make_active(user_id: Union[int, str], group_id: Union[int, str]) -> bool:
+    """Set active connection with validation and error handling"""
+    if not validate_ids(user_id, group_id):
+        return False
+
+    try:
+        result = mycol.update_one(
+            {'_id': user_id},
+            {"$set": {"active_group": group_id}}
+        )
+        return result.modified_count > 0
+        
+    except PyMongoError as e:
+        logger.error(f"Database error in make_active: {str(e)}")
+        return False
 
 
 async def make_inactive(user_id):
